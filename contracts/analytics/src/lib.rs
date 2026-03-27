@@ -54,6 +54,8 @@ pub enum ContractError {
     NotInitialized = 2,
     Unauthorized = 3,
     ExternalCallFailed = 4,
+    TimelockNotMet = 5,
+    SubmissionExpired = 6,
 }
 
 #[contractclient(name = "MetricSourceClient")]
@@ -183,6 +185,26 @@ impl AnalyticsContract {
 
         env.storage().persistent().set(&key, &current);
         Ok(())
+    }
+
+    pub fn aggregate_records_in_window(
+        env: Env,
+        caller: Address,
+        kind: Symbol,
+        dims: MetricDimensions,
+        ciphertexts: Vec<i128>,
+        not_before: u64,
+        expires_at: u64,
+    ) -> Result<(), ContractError> {
+        let now = env.ledger().timestamp();
+        if now < not_before {
+            return Err(ContractError::TimelockNotMet);
+        }
+        if now > expires_at {
+            return Err(ContractError::SubmissionExpired);
+        }
+
+        Self::aggregate_records(env, caller, kind, dims, ciphertexts)
     }
 
     pub fn get_metric(env: Env, kind: Symbol, dims: MetricDimensions) -> MetricValue {
