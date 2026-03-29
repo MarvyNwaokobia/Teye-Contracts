@@ -38,6 +38,7 @@ const PENDING_ADMIN: Symbol = symbol_short!("PEND_ADM");
 const RATE_CFG: Symbol = symbol_short!("RATECFG");
 const RATE_TRACK: Symbol = symbol_short!("RLTRK");
 const NONCE: Symbol = symbol_short!("NONCE");
+const REENTRANCY_LOCK: Symbol = symbol_short!("REN_LOCK");
 
 /// Maximum number of public inputs accepted per proof verification.
 const MAX_PUBLIC_INPUTS: u32 = 16;
@@ -90,6 +91,8 @@ pub enum ContractError {
     InvalidAuthLevel = 13,
     /// Public inputs are insufficient for the required authentication level.
     ProofRequiredForAuthLevel = 14,
+    /// A nested call attempted to re-enter verification while already executing.
+    ReentrantCall = 15,
 }
 
 /// Map low-level proof validation errors into contract-level errors.
@@ -168,6 +171,19 @@ fn validate_level4_attributes(request: &AccessRequest) -> Result<(), ContractErr
         return Err(ContractError::ProofRequiredForAuthLevel);
     }
     Ok(())
+}
+
+fn enter_reentrancy_guard(env: &Env) -> Result<common::ReentrancyGuard<'_>, ContractError> {
+    if env
+        .storage()
+        .instance()
+        .get::<_, bool>(&REENTRANCY_LOCK)
+        .unwrap_or(false)
+    {
+        return Err(ContractError::ReentrantCall);
+    }
+
+    Ok(common::ReentrancyGuard::new(env))
 }
 
 #[contractimpl]
@@ -428,6 +444,7 @@ impl ZkVerifierContract {
     ///
     /// Returns `true` if the proof is valid and all checks pass, otherwise returns an error or `false`.
     pub fn verify_access(env: Env, request: AccessRequest) -> Result<bool, ContractError> {
+        let _guard = enter_reentrancy_guard(&env)?;
         common::pausable::require_not_paused(&env).map_err(|_| ContractError::Paused)?;
         request.user.require_auth();
 
