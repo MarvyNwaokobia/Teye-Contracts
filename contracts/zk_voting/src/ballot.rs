@@ -24,4 +24,5 @@ pub enum VoteError {
     InvalidOption = 4,
     Unauthorized = 5,
     MerkleRootNotSet = 6,
+    TallyOverflow = 7,
 }

@@ -132,9 +132,10 @@ impl ZkVoting {
             .persistent()
             .get(&DataKey::Tally(option_index))
             .unwrap_or(0);
+        let next = current.checked_add(1).ok_or(VoteError::TallyOverflow)?;
         env.storage()
             .persistent()
-            .set(&DataKey::Tally(option_index), &(current + 1));
+            .set(&DataKey::Tally(option_index), &next);
 
         Ok(())
     }
