@@ -248,8 +248,6 @@ impl StakingContract {
             env.storage().persistent().set(&since_key, &now);
         }
 
-        events::publish_staked(&env, staker, amount, new_total);
-
         Ok(())
     }
 
