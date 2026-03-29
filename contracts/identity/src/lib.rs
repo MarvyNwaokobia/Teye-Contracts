@@ -4,6 +4,9 @@ pub mod credential;
 pub mod events;
 pub mod recovery;
 
+#[cfg(test)]
+mod test;
+
 use credential::CredentialError;
 use recovery::{RecoveryError, RecoveryRequest};
 use soroban_sdk::{

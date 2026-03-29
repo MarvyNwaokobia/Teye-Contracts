@@ -11,6 +11,9 @@ const COOLDOWN_PERIOD: u64 = 172_800; // 48 hours in seconds
 const TTL_THRESHOLD: u32 = 5_184_000;
 const TTL_EXTEND_TO: u32 = 10_368_000;
 
+// This must match HOLDER_BIND_PREFIX in your lib.rs exactly.
+const HOLDER_BIND_PREFIX: &str = "holder_bind"; 
+
 // ── Storage key symbols ──────────────────────────────────────────────────────
 
 const GUARDIANS: Symbol = symbol_short!("GUARD");
@@ -69,6 +72,11 @@ fn recovery_key(owner: &Address) -> (Symbol, Address) {
 
 fn owner_active_key(owner: &Address) -> (Symbol, Address) {
     (OWN_ACT, owner.clone())
+}
+
+/// Matches the key structure in lib.rs: (Symbol::new(&env, HOLDER_BIND_PREFIX), caller)
+fn credentials_key(env: &Env, owner: &Address) -> (Symbol, Address) {
+    (Symbol::new(env, HOLDER_BIND_PREFIX), owner.clone())
 }
 
 fn extend_ttl(env: &Env, key: &(Symbol, Address)) {
@@ -272,24 +280,35 @@ pub fn execute_recovery(env: &Env, owner: &Address) -> Result<Address, RecoveryE
 
     let new_address = request.new_address.clone();
 
-    // Deactivate old address
+    // 1. Deactivate old address
     deactivate_owner(env, owner);
 
-    // Activate new address
+    // 2. Activate new address
     set_owner_active(env, &new_address);
 
-    // Transfer guardian configuration to new address
+    // 3. Transfer guardian configuration
     let guardians = get_guardians(env, owner);
     let new_guard_key = guardians_key(&new_address);
     env.storage().persistent().set(&new_guard_key, &guardians);
     extend_ttl(env, &new_guard_key);
 
-    // Transfer threshold to new address
+    // 4. Transfer threshold
     let new_thr_key = threshold_key(&new_address);
     env.storage().persistent().set(&new_thr_key, &threshold);
     extend_ttl(env, &new_thr_key);
 
-    // Clean up recovery request
+    // 5. Transfer credential bindings (Crucial for test_revocation_path_compromised_key)
+    let old_creds_key = credentials_key(env, owner);
+    if let Some(creds) = env.storage().persistent().get::<_, Vec<soroban_sdk::BytesN<32>>>(&old_creds_key) {
+        let new_creds_key = credentials_key(env, &new_address);
+        env.storage().persistent().set(&new_creds_key, &creds);
+        extend_ttl(env, &new_creds_key);
+        
+        // Clean up old bindings
+        env.storage().persistent().remove(&old_creds_key);
+    }
+
+    // 6. Clean up recovery request
     env.storage().persistent().remove(&key);
 
     Ok(new_address)

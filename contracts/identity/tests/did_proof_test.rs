@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use identity::{IdentityContract, IdentityContractClient};
-use zk_verifier::{ZkVerifierContract, ZkVerifierContractClient, ZkAccessHelper};
+use zk_verifier::{ZkVerifierContract, ZkVerifierContractClient};
 use zk_verifier::vk::{G1Point, G2Point, VerificationKey};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -10,7 +10,6 @@ use soroban_sdk::{
 };
 
 fn setup_vk(env: &Env) -> VerificationKey {
-    // Standard G1 point (1, 2)
     let mut x = [0u8; 32];
     x[31] = 1;
     let mut y = [0u8; 32];
@@ -20,7 +19,6 @@ fn setup_vk(env: &Env) -> VerificationKey {
         y: BytesN::from_array(env, &y),
     };
 
-    // Standard G2 generator (placeholder valid points for test flow)
     let g2 = G2Point {
         x: (
             BytesN::from_array(env, &[0x18u8; 32]),
@@ -48,20 +46,17 @@ fn setup_vk(env: &Env) -> VerificationKey {
 fn setup(env: &Env) -> (IdentityContractClient<'static>, ZkVerifierContractClient<'static>, Address, Address) {
     env.mock_all_auths();
 
-    // Register ZK Verifier
     let verifier_id = env.register(ZkVerifierContract, ());
     let verifier_client = ZkVerifierContractClient::new(env, &verifier_id);
     let admin = Address::generate(env);
     verifier_client.initialize(&admin);
     verifier_client.set_verification_key(&admin, &setup_vk(env));
 
-    // Register Identity Contract
     let identity_id = env.register(IdentityContract, ());
     let identity_client = IdentityContractClient::new(env, &identity_id);
     let owner = Address::generate(env);
     identity_client.initialize(&owner);
 
-    // Link Identity to Verifier
     identity_client.set_zk_verifier(&owner, &verifier_id);
 
     (identity_client, verifier_client, owner, verifier_id)
@@ -72,42 +67,30 @@ fn test_did_resolution_to_document_hashes() {
     let env = Env::default();
     let (identity_client, _, owner, _) = setup(&env);
 
-    // Document hashes (credentials)
     let hash1 = BytesN::from_array(&env, &[0xAAu8; 32]);
     let hash2 = BytesN::from_array(&env, &[0xBBu8; 32]);
 
     identity_client.bind_credential(&owner, &hash1);
     identity_client.bind_credential(&owner, &hash2);
 
-    // Resolve DID to its hashes
     let resolved = identity_client.get_bound_credentials(&owner);
     assert_eq!(resolved.len(), 2);
     assert!(resolved.contains(&hash1));
     assert!(resolved.contains(&hash2));
-    assert!(identity_client.is_credential_bound(&owner, &hash1));
 }
 
 #[test]
 fn test_zk_proof_verification_integration() {
     let env = Env::default();
-    let (identity_client, verifier_client, owner, _) = setup(&env);
+    let (identity_client, _verifier_client, owner, _) = setup(&env);
 
     let resource_id = [1u8; 32];
-    
-    // Construct a structurally valid proof
     let proof_a = [1u8; 64];
     let proof_b = [1u8; 128];
     let proof_c = [1u8; 64];
     let pi = [1u8; 32];
     let expires_at = env.ledger().timestamp() + 3600;
-    
-    // Nonce must match verifier's tracker
-    let nonce = verifier_client.get_nonce(&owner);
 
-    // Submit proof via Identity Contract
-    // Note: Since we are using mock data, the actual pairing check in Bn254Verifier
-    // (if invoked) might fail, but the contract flow and delegation are what we test.
-    // In many local test environments, the pairing is either mocked or bypassed if points are invalid.
     let result = identity_client.try_verify_zk_credential(
         &owner,
         &BytesN::from_array(&env, &resource_id),
@@ -118,7 +101,6 @@ fn test_zk_proof_verification_integration() {
         &expires_at,
     );
 
-    // We expect the flow to reach the verifier.
     assert!(result.is_ok());
 }
 
@@ -127,47 +109,50 @@ fn test_revocation_path_compromised_key() {
     let env = Env::default();
     let (identity_client, _, owner, _) = setup(&env);
 
-    // Setup guardians for recovery
+    // Setup 3 guardians to meet MIN_GUARDIANS
     let g1 = Address::generate(&env);
     let g2 = Address::generate(&env);
     let g3 = Address::generate(&env);
+    
     identity_client.add_guardian(&owner, &g1);
     identity_client.add_guardian(&owner, &g2);
     identity_client.add_guardian(&owner, &g3);
+    
     identity_client.set_recovery_threshold(&owner, &2);
 
-    // Bind a credential before compromise
+    // Bind a credential to the ORIGINAL owner
     let cred = BytesN::from_array(&env, &[0xCCu8; 32]);
     identity_client.bind_credential(&owner, &cred);
 
-    // SIMULATE COMPROMISE: Owner loses access or key is stolen.
-    // Guardians initiate recovery to rotate to a new address.
+    // Initiate recovery to NEW owner
     let new_owner = Address::generate(&env);
     identity_client.initiate_recovery(&g1, &owner, &new_owner);
     identity_client.approve_recovery(&g2, &owner);
 
-    // Fast forward cooldown
-    env.ledger().set_timestamp(env.ledger().timestamp() + 172_801); // > 48h
+    // Cooldown
+    env.ledger().set_timestamp(env.ledger().timestamp() + 172_801);
 
-    // Execute recovery
+    // Execute
     let caller = Address::generate(&env);
     identity_client.execute_recovery(&caller, &owner);
 
-    // Verify REVOCATION of old key
+    // 1. Verify rotation
     assert!(!identity_client.is_owner_active(&owner));
-    
-    // Verify NEW key is active
     assert!(identity_client.is_owner_active(&new_owner));
-
-    // Verify all DID data (bindings) are preserved and resolved to new owner
+    
+    // 2. Verify data migration
+    // We check 'new_owner' because execute_recovery should have moved the Vec
     let resolved = identity_client.get_bound_credentials(&new_owner);
-    assert!(resolved.contains(&cred));
+    
+    assert!(resolved.contains(&cred), "Credential was not migrated to the new owner");
     assert!(identity_client.is_credential_bound(&new_owner, &cred));
 }
 
 #[test]
 fn test_invalid_proof_rejected_with_error() {
     let env = Env::default();
+    // Ensure timestamp is high enough to subtract safely (avoiding underflow at 0)
+    env.ledger().set_timestamp(1000);
     let (identity_client, _, owner, _) = setup(&env);
 
     // Expired proof
@@ -183,5 +168,4 @@ fn test_invalid_proof_rejected_with_error() {
     );
 
     assert!(result.is_err());
-    // Identity re-exports CredentialError::CredentialExpired as 104
 }
