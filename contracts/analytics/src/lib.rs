@@ -1,7 +1,7 @@
 pub mod aggregation;
 pub mod differential_privacy;
-pub mod homomorphic;
 pub mod events;
+pub mod homomorphic;
 
 #[cfg(test)]
 mod test;
@@ -114,16 +114,24 @@ impl AnalyticsContract {
     }
 
     pub fn set_aggregator(env: Env, new_aggregator: Address) -> Result<(), ContractError> {
-        let admin: Address = env.storage().instance().get(&ADMIN).ok_or(ContractError::NotInitialized)?;
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&ADMIN)
+            .ok_or(ContractError::NotInitialized)?;
         admin.require_auth();
 
         env.storage().instance().set(&AGGREGATOR, &new_aggregator);
-        
+
         let new_ver = Self::get_dep_ver(env.clone()) + 1;
         env.storage().instance().set(&DEP_VER, &new_ver);
 
         env.events().publish(
-            (symbol_short!("DEP_UP"), symbol_short!("AGGR"), admin.clone()),
+            (
+                symbol_short!("DEP_UP"),
+                symbol_short!("AGGR"),
+                admin.clone(),
+            ),
             events::DependencyUpdatedEvent {
                 admin,
                 effect: symbol_short!("AGGR"),
@@ -138,7 +146,11 @@ impl AnalyticsContract {
         pub_key: PaillierPublicKey,
         priv_key: Option<PaillierPrivateKey>,
     ) -> Result<(), ContractError> {
-        let admin: Address = env.storage().instance().get(&ADMIN).ok_or(ContractError::NotInitialized)?;
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&ADMIN)
+            .ok_or(ContractError::NotInitialized)?;
         admin.require_auth();
 
         if pub_key.n <= 0 || pub_key.nn <= 0 || pub_key.g <= 0 {
@@ -161,7 +173,11 @@ impl AnalyticsContract {
         env.storage().instance().set(&DEP_VER, &new_ver);
 
         env.events().publish(
-            (symbol_short!("DEP_UP"), symbol_short!("KEYS"), admin.clone()),
+            (
+                symbol_short!("DEP_UP"),
+                symbol_short!("KEYS"),
+                admin.clone(),
+            ),
             events::DependencyUpdatedEvent {
                 admin,
                 effect: symbol_short!("KEYS"),
@@ -192,10 +208,11 @@ impl AnalyticsContract {
             return Err(ContractError::Unauthorized);
         }
 
-        let mut imported = match MetricSourceClient::new(&env, &source).try_read_metric(&kind, &dims) {
-            Ok(Ok(value)) => value,
-            _ => return Err(ContractError::ExternalCallFailed),
-        };
+        let mut imported =
+            match MetricSourceClient::new(&env, &source).try_read_metric(&kind, &dims) {
+                Ok(Ok(value)) => value,
+                _ => return Err(ContractError::ExternalCallFailed),
+            };
 
         imported.version = Self::get_dep_ver(env.clone());
 
@@ -271,15 +288,16 @@ impl AnalyticsContract {
         let count = ciphertexts.len() as i128;
 
         let key = (METRIC, kind.clone(), dims.clone());
-        let mut current: MetricValue = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .unwrap_or(MetricValue { count: 0, sum: 0, version: 0 });
+        let mut current: MetricValue =
+            env.storage().persistent().get(&key).unwrap_or(MetricValue {
+                count: 0,
+                sum: 0,
+                version: 0,
+            });
 
         let dep_ver = Self::get_dep_ver(env.clone());
         if current.version < dep_ver {
-             env.events().publish(
+            env.events().publish(
                 (symbol_short!("M_INVALID"), kind.clone(), caller.clone()),
                 events::DataInvalidatedEvent {
                     kind: kind.clone(),
@@ -331,14 +349,18 @@ impl AnalyticsContract {
 
     pub fn get_metric(env: Env, kind: Symbol, dims: MetricDimensions) -> MetricValue {
         let key = (METRIC, kind, dims);
-        let stored: MetricValue = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .unwrap_or(MetricValue { count: 0, sum: 0, version: 0 });
-        
+        let stored: MetricValue = env.storage().persistent().get(&key).unwrap_or(MetricValue {
+            count: 0,
+            sum: 0,
+            version: 0,
+        });
+
         if stored.version < Self::get_dep_ver(env.clone()) {
-            return MetricValue { count: 0, sum: 0, version: 0 };
+            return MetricValue {
+                count: 0,
+                sum: 0,
+                version: 0,
+            };
         }
         stored
     }

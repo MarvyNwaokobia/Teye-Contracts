@@ -80,7 +80,14 @@ fn test_aggregate_records() {
 
     // Initial value should be zeroed (version 0 means non-existent or stale).
     let initial = client.get_metric(&kind, &dims);
-    assert_eq!(initial, MetricValue { count: 0, sum: 0, version: 0 });
+    assert_eq!(
+        initial,
+        MetricValue {
+            count: 0,
+            sum: 0,
+            version: 0
+        }
+    );
 
     // Encrypt some records
     let c1 = client.encrypt(&10);
@@ -207,12 +214,16 @@ fn test_paillier_key_update_invalidates_data() {
     client.aggregate_records(&aggregator, &kind, &dims, &recs);
 
     // Update keys
-    let new_pub = PaillierPublicKey { n: 55, nn: 3025, g: 56 };
+    let new_pub = PaillierPublicKey {
+        n: 55,
+        nn: 3025,
+        g: 56,
+    };
     let new_priv = PaillierPrivateKey { lambda: 40, mu: 10 };
     client.set_paillier_keys(&new_pub, &Some(new_priv));
 
     assert_eq!(client.get_dep_ver(), 2);
-    
+
     let val = client.get_metric(&kind, &dims);
     assert_eq!(val.count, 0);
 }
@@ -228,7 +239,11 @@ fn test_unauthorized_dependency_update() {
     let aggregator = Address::generate(&env);
     let mallory = Address::generate(&env);
 
-    let pub_key = PaillierPublicKey { n: 33, nn: 1089, g: 34 };
+    let pub_key = PaillierPublicKey {
+        n: 33,
+        nn: 1089,
+        g: 34,
+    };
     client.initialize(&admin, &aggregator, &pub_key, &None);
 
     // Mallory tries to change aggregator

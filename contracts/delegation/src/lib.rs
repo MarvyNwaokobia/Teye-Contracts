@@ -74,6 +74,9 @@ impl DelegationContract {
         if task.executor != Some(executor.clone()) {
             panic!("Not assigned executor");
         }
+        if task.status != TaskStatus::Assigned {
+            panic!("Task not in assigned state");
+        }
 
         let is_valid = verification::verify_execution_proof(
             &env,
@@ -112,3 +115,6 @@ impl DelegationContract {
         env.storage().instance().get(&ADMIN)
     }
 }
+
+#[cfg(test)]
+mod test;

@@ -251,8 +251,24 @@ impl CrossChainContract {
         bridge::import_record(&env, package, anchored_root, 0)
     }
 
-    pub fn anchor_state_root(env: Env, root: BytesN<32>, chain_id: Symbol) {
+    pub fn anchor_state_root(
+        env: Env,
+        caller: Address,
+        root: BytesN<32>,
+        chain_id: Symbol,
+    ) -> Result<(), CrossChainError> {
+        caller.require_auth();
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&ADMIN)
+            .ok_or(CrossChainError::NotInitialized)?;
+        if caller != admin {
+            return Err(CrossChainError::Unauthorized);
+        }
+
         relay::anchor_state_root(&env, root.to_array(), chain_id);
+        Ok(())
     }
 
     pub fn get_latest_root(env: Env, chain_id: Symbol) -> Option<StateRootAnchor> {

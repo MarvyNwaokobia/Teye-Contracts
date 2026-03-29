@@ -158,7 +158,7 @@ fn test_tenant_isolation_with_different_dimensions() {
 
     // Same region, different age bands - should be isolated
     let region = symbol_short!("REG_X");
-    
+
     let age_band_young = MetricDimensions {
         region: Some(region.clone()),
         age_band: Some(symbol_short!("A18_39")),
@@ -262,7 +262,7 @@ fn test_aggregate_tenant_isolation() {
 
     // Create multiple entries for the same tenant
     let tenant_a_region = symbol_short!("HOSP_A");
-    
+
     let conditions = vec![
         symbol_short!("MYOPIA"),
         symbol_short!("GLAUCOMA"),
@@ -328,7 +328,7 @@ fn test_trend_isolation_across_tenants() {
         };
 
         let mut records_a = Vec::new(&env);
-        records_a.push_back(client.encrypt(&( (time_bucket * 10) as i128 ))); // 10, 20, 30
+        records_a.push_back(client.encrypt(&((time_bucket * 10) as i128))); // 10, 20, 30
         client.aggregate_records(&aggregator, &kind, &dims_a, &records_a);
 
         // Tenant B data
@@ -340,7 +340,7 @@ fn test_trend_isolation_across_tenants() {
         };
 
         let mut records_b = Vec::new(&env);
-        records_b.push_back(client.encrypt(&( (time_bucket * 5) as i128 ))); // 5, 10, 15
+        records_b.push_back(client.encrypt(&((time_bucket * 5) as i128))); // 5, 10, 15
         client.aggregate_records(&aggregator, &kind, &dims_b, &records_b);
     }
 

@@ -1,7 +1,9 @@
 extern crate std;
 
-use analytics::{AnalyticsContract, AnalyticsContractClient, MetricDimensions, ContractError, MetricValue};
-use soroban_sdk::{testutils::Address as _, Address, Env, Vec, symbol_short};
+use analytics::{
+    AnalyticsContract, AnalyticsContractClient, ContractError, MetricDimensions, MetricValue,
+};
+use soroban_sdk::{symbol_short, testutils::Address as _, Address, Env, Vec};
 
 fn setup_cross_query_test() -> (Env, AnalyticsContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -342,8 +344,16 @@ fn test_complex_cross_query_attempts() {
         let result = client.get_metric(&kind, attempt_dims);
 
         // All cross-query attempts should return no data
-        assert_eq!(result.count, 0, "Cross-query attempt {} should return no data", i);
-        assert_eq!(result.sum, 0, "Cross-query attempt {} should return no sum", i);
+        assert_eq!(
+            result.count, 0,
+            "Cross-query attempt {} should return no data",
+            i
+        );
+        assert_eq!(
+            result.sum, 0,
+            "Cross-query attempt {} should return no sum",
+            i
+        );
         assert_eq!(result.version, 0);
     }
 
@@ -371,7 +381,7 @@ fn test_trend_cross_query_isolation() {
         };
 
         let mut records_a = Vec::new(&env);
-        records_a.push_back(client.encrypt(&( (time_bucket * 10) as i128 )));
+        records_a.push_back(client.encrypt(&((time_bucket * 10) as i128)));
         client.aggregate_records(&aggregator, &kind, &dims_a, &records_a);
 
         // Tenant B data
@@ -383,7 +393,7 @@ fn test_trend_cross_query_isolation() {
         };
 
         let mut records_b = Vec::new(&env);
-        records_b.push_back(client.encrypt(&( (time_bucket * 5) as i128 )));
+        records_b.push_back(client.encrypt(&((time_bucket * 5) as i128)));
         client.aggregate_records(&aggregator, &kind, &dims_b, &records_b);
     }
 

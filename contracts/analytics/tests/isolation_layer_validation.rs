@@ -50,7 +50,7 @@ fn test_region_key_validation() {
 
         let mut records = Vec::new(&env);
         records.push_back(client.encrypt(&10i128));
-        
+
         // Should succeed with valid region
         let result = client.try_aggregate_records(&aggregator, &kind, &dims, &records);
         assert!(
@@ -70,26 +70,32 @@ fn test_region_key_validation() {
 
     let mut null_records = Vec::new(&env);
     null_records.push_back(client.encrypt(&10i128));
-    
+
     // Should also succeed with null region
     let null_result =
         client.try_aggregate_records(&aggregator, &kind, &null_region_dims, &null_records);
     assert!(null_result.is_ok(), "Should succeed with null region");
 
     // Verify isolation between different regions
-    let region_a_data = client.get_metric(&kind, &MetricDimensions {
-        region: Some(symbol_short!("HOSP_A")),
-        age_band: Some(symbol_short!("A40_64")),
-        condition: Some(symbol_short!("MYOPIA")),
-        time_bucket,
-    });
+    let region_a_data = client.get_metric(
+        &kind,
+        &MetricDimensions {
+            region: Some(symbol_short!("HOSP_A")),
+            age_band: Some(symbol_short!("A40_64")),
+            condition: Some(symbol_short!("MYOPIA")),
+            time_bucket,
+        },
+    );
 
-    let region_b_data = client.get_metric(&kind, &MetricDimensions {
-        region: Some(symbol_short!("CLIN_B")),
-        age_band: Some(symbol_short!("A40_64")),
-        condition: Some(symbol_short!("MYOPIA")),
-        time_bucket,
-    });
+    let region_b_data = client.get_metric(
+        &kind,
+        &MetricDimensions {
+            region: Some(symbol_short!("CLIN_B")),
+            age_band: Some(symbol_short!("A40_64")),
+            condition: Some(symbol_short!("MYOPIA")),
+            time_bucket,
+        },
+    );
 
     let null_region_data = client.get_metric(&kind, &null_region_dims);
 
@@ -125,7 +131,7 @@ fn test_age_band_key_validation() {
 
         let mut records = Vec::new(&env);
         records.push_back(client.encrypt(&15i128));
-        
+
         // Should succeed with valid age band
         let result = client.try_aggregate_records(&aggregator, &kind, &dims, &records);
         assert!(
@@ -145,7 +151,7 @@ fn test_age_band_key_validation() {
 
     let mut null_records = Vec::new(&env);
     null_records.push_back(client.encrypt(&20i128));
-    
+
     // Should succeed with null age band
     let null_result =
         client.try_aggregate_records(&aggregator, &kind, &null_age_dims, &null_records);
@@ -153,12 +159,15 @@ fn test_age_band_key_validation() {
 
     // Verify isolation between different age bands
     for age_band in &valid_age_bands {
-        let age_data = client.get_metric(&kind, &MetricDimensions {
-            region: Some(region.clone()),
-            age_band: Some(age_band.clone()),
-            condition: Some(symbol_short!("DIABETES")),
-            time_bucket,
-        });
+        let age_data = client.get_metric(
+            &kind,
+            &MetricDimensions {
+                region: Some(region.clone()),
+                age_band: Some(age_band.clone()),
+                condition: Some(symbol_short!("DIABETES")),
+                time_bucket,
+            },
+        );
 
         assert_eq!(age_data.count, 1, "Each age band should have its own data");
     }
@@ -198,7 +207,7 @@ fn test_condition_key_validation() {
 
         let mut records = Vec::new(&env);
         records.push_back(client.encrypt(&25i128));
-        
+
         // Should succeed with valid condition
         let result = client.try_aggregate_records(&aggregator, &kind, &dims, &records);
         assert!(
@@ -218,7 +227,7 @@ fn test_condition_key_validation() {
 
     let mut null_records = Vec::new(&env);
     null_records.push_back(client.encrypt(&30i128));
-    
+
     // Should succeed with null condition
     let null_result =
         client.try_aggregate_records(&aggregator, &kind, &null_condition_dims, &null_records);
@@ -226,14 +235,20 @@ fn test_condition_key_validation() {
 
     // Verify isolation between different conditions
     for condition in &valid_conditions {
-        let condition_data = client.get_metric(&kind, &MetricDimensions {
-            region: Some(region.clone()),
-            age_band: Some(age_band.clone()),
-            condition: Some(condition.clone()),
-            time_bucket,
-        });
+        let condition_data = client.get_metric(
+            &kind,
+            &MetricDimensions {
+                region: Some(region.clone()),
+                age_band: Some(age_band.clone()),
+                condition: Some(condition.clone()),
+                time_bucket,
+            },
+        );
 
-        assert_eq!(condition_data.count, 1, "Each condition should have its own data");
+        assert_eq!(
+            condition_data.count, 1,
+            "Each condition should have its own data"
+        );
     }
 
     let null_condition_data = client.get_metric(&kind, &null_condition_dims);
@@ -267,7 +282,7 @@ fn test_time_bucket_key_validation() {
 
         let mut records = Vec::new(&env);
         records.push_back(client.encrypt(&5i128));
-        
+
         // Should succeed with valid time bucket
         let result = client.try_aggregate_records(&aggregator, &kind, &dims, &records);
         assert!(
@@ -290,7 +305,7 @@ fn test_time_bucket_key_validation() {
 
         let mut records = Vec::new(&env);
         records.push_back(client.encrypt(&1i128));
-        
+
         // Should handle edge cases
         let result = client.try_aggregate_records(&aggregator, &kind, &dims, &records);
         assert!(
@@ -327,7 +342,7 @@ fn test_combination_key_isolation() {
 
                 let mut records = Vec::new(&env);
                 records.push_back(client.encrypt(&10i128));
-                
+
                 let result = client.try_aggregate_records(&aggregator, &kind, &dims, &records);
                 assert!(
                     result.is_ok(),
@@ -473,8 +488,8 @@ fn test_storage_key_isolation() {
     };
 
     let dims2 = MetricDimensions {
-        region: Some(symbol_short!("HOSP_A")), // Same region
-        age_band: Some(symbol_short!("A40_64")),   // Same age band
+        region: Some(symbol_short!("HOSP_A")),      // Same region
+        age_band: Some(symbol_short!("A40_64")),    // Same age band
         condition: Some(symbol_short!("GLAUCOMA")), // Different condition
         time_bucket,
     };
@@ -482,9 +497,9 @@ fn test_storage_key_isolation() {
     // Add different data to each
     let mut records1 = Vec::new(&env);
     records1.push_back(client.encrypt(&100i128)); // 100 for myopia
-    
+
     let mut records2 = Vec::new(&env);
-    records2.push_back(client.encrypt(&50i128));  // 50 for glaucoma
+    records2.push_back(client.encrypt(&50i128)); // 50 for glaucoma
 
     client.aggregate_records(&aggregator, &kind, &dims1, &records1);
     client.aggregate_records(&aggregator, &kind, &dims2, &records2);

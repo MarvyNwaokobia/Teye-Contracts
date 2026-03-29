@@ -1,5 +1,5 @@
-use soroban_sdk::{contracttype, Address, Symbol};
 use crate::{MetricDimensions, MetricValue};
+use soroban_sdk::{contracttype, Address, Symbol};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
