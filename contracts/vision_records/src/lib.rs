@@ -1,4 +1,4 @@
-#![no_std]
+﻿#![no_std]
 #![allow(clippy::too_many_arguments)]
 
 extern crate alloc;
@@ -2894,3 +2894,6 @@ mod test_admin_tiers;
 
 #[cfg(test)]
 mod test_occ;
+
+#[cfg(test)]
+mod test_diagnostic_image_metadata;
