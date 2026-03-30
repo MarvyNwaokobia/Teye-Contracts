@@ -38,7 +38,8 @@ use gas_token::GasTokenError;
 use quota::{QuotaError, QuotaUsage, TenantQuota};
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env, Symbol,
+    Vec,
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -715,6 +716,13 @@ impl MeteringContract {
             .persistent()
             .get(&TENANT_LIST)
             .unwrap_or(Vec::new(&env))
+    }
+
+    pub fn upgrade(env: Env, admin_caller: Address, new_wasm_hash: BytesN<32>) -> Result<(), MeteringError> {
+        admin_caller.require_auth();
+        Self::require_admin(&env, &admin_caller)?;
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
     }
 }
 
