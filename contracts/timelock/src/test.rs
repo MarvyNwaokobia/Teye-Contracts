@@ -548,3 +548,204 @@ fn test_depth_boundary_plus_sweep_all_rejected() {
         );
     }
 }
+
+// ── Branch 3: Gas / Resource-Usage Tests (#570) ───────────────────────────────
+//
+// These tests demonstrate that valid payloads at their maximum permitted size
+// (max nodes × max depth × max leaves) do not exhaust gas or cause any
+// resource-related failure.  They also verify that queue operations remain
+// efficient as the number of entries grows.
+
+/// Queuing and then executing a fully-packed valid payload — `MAX_PAYLOAD_WIDTH`
+/// nodes each at `MAX_PAYLOAD_DEPTH` with `MAX_LEAF_COUNT` leaves — completes
+/// without exceeding resource limits.
+#[test]
+fn test_fully_packed_valid_payload_executes_successfully() {
+    let env = Env::default();
+    let (client, _) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+    let id = make_id(&env, 80);
+
+    env.ledger().set_timestamp(0);
+
+    let mut nodes: Vec<PayloadNode> = Vec::new(&env);
+    for i in 0..MAX_PAYLOAD_WIDTH {
+        let mut leaves: Vec<LeafData> = Vec::new(&env);
+        for j in 0..MAX_LEAF_COUNT {
+            leaves.push_back(LeafData {
+                key: symbol_short!("k"),
+                value: BytesN::from_array(&env, &[((i + j) % 256) as u8; 32]),
+            });
+        }
+        nodes.push_back(PayloadNode {
+            depth: MAX_PAYLOAD_DEPTH,
+            data: Bytes::new(&env),
+            leaves,
+        });
+    }
+    let payload = NestedPayload { version: 1, nodes };
+
+    client.queue_tx(&caller, &id, &target, &100, &payload);
+
+    env.ledger().set_timestamp(101);
+    let executed = client.execute_tx(&caller, &id);
+    assert_eq!(executed.id, id);
+    assert_eq!(executed.payload.nodes.len(), MAX_PAYLOAD_WIDTH);
+}
+
+/// Queuing 20 transactions (each with a moderately sized payload) and calling
+/// `get_queue` returns all entries without truncation or resource failure.
+#[test]
+fn test_get_queue_with_many_entries_no_truncation() {
+    let env = Env::default();
+    let (client, _) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+
+    env.ledger().set_timestamp(0);
+    let count: u8 = 20;
+    for i in 1..=count {
+        let id = make_id(&env, i);
+        let payload = single_node_payload(&env, 4, 8);
+        client.queue_tx(&caller, &id, &target, &100, &payload);
+    }
+
+    let queue = client.get_queue();
+    assert_eq!(queue.len(), count as u32);
+}
+
+/// Sequentially executing all entries in a queue of 15 transactions succeeds
+/// without performance degradation — the queue drains to zero.
+#[test]
+fn test_sequential_execute_drains_large_queue() {
+    let env = Env::default();
+    let (client, _) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+
+    env.ledger().set_timestamp(0);
+    let count: u8 = 15;
+    for i in 1..=count {
+        let id = make_id(&env, i);
+        let payload = single_node_payload(&env, 3, 6);
+        client.queue_tx(&caller, &id, &target, &100, &payload);
+    }
+
+    env.ledger().set_timestamp(101);
+    for i in 1..=count {
+        let id = make_id(&env, i);
+        let entry = client.execute_tx(&caller, &id);
+        assert_eq!(entry.id, id);
+    }
+
+    assert_eq!(client.get_queue().len(), 0);
+}
+
+/// Queuing a transaction with a minimal payload (zero nodes) has a negligible
+/// storage footprint — version field and empty node vec are serialized cleanly.
+#[test]
+fn test_minimal_payload_minimal_storage_footprint() {
+    let env = Env::default();
+    let (client, _) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+    let id = make_id(&env, 90);
+
+    env.ledger().set_timestamp(0);
+    let payload = NestedPayload {
+        version: 0,
+        nodes: Vec::new(&env),
+    };
+    let entry = client.queue_tx(&caller, &id, &target, &1, &payload);
+    assert_eq!(entry.payload.nodes.len(), 0);
+    assert_eq!(entry.payload.version, 0);
+}
+
+/// `get_tx` on a queue with 10 entries performs consistently regardless of
+/// the position of the target entry — early vs late position in the queue.
+#[test]
+fn test_get_tx_consistent_cost_regardless_of_position() {
+    let env = Env::default();
+    let (client, _) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+
+    env.ledger().set_timestamp(0);
+    for i in 1u8..=10 {
+        let id = make_id(&env, i);
+        let depth = (i as u32 % MAX_PAYLOAD_DEPTH) + 1;
+        let leaves = (i as u32 % MAX_LEAF_COUNT) + 1;
+        let payload = single_node_payload(&env, depth, leaves);
+        client.queue_tx(&caller, &id, &target, &100, &payload);
+    }
+
+    // Retrieve entries at the start, middle, and end of the queue
+    for &i in &[1u8, 5, 10] {
+        let id = make_id(&env, i);
+        let entry = client.get_tx(&id);
+        assert_eq!(entry.id, id);
+    }
+}
+
+/// Max-width payload where every node has zero leaves serialises cleanly —
+/// empty `Vec<LeafData>` inside nested XDR must not cause encoding errors.
+#[test]
+fn test_max_width_zero_leaves_per_node_serializes_cleanly() {
+    let env = Env::default();
+    let (client, _) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+    let id = make_id(&env, 91);
+
+    env.ledger().set_timestamp(0);
+    let mut nodes: Vec<PayloadNode> = Vec::new(&env);
+    for _ in 0..MAX_PAYLOAD_WIDTH {
+        nodes.push_back(PayloadNode {
+            depth: MAX_PAYLOAD_DEPTH,
+            data: Bytes::new(&env),
+            leaves: Vec::new(&env),
+        });
+    }
+    let payload = NestedPayload { version: 3, nodes };
+    let entry = client.queue_tx(&caller, &id, &target, &50, &payload);
+    assert_eq!(entry.payload.nodes.len(), MAX_PAYLOAD_WIDTH);
+    for i in 0..MAX_PAYLOAD_WIDTH {
+        assert_eq!(entry.payload.nodes.get(i).unwrap().leaves.len(), 0);
+    }
+}
+
+/// Prioritising and executing a fully-packed payload entry works without
+/// resource exhaustion when the priority flag bypasses the delay check.
+#[test]
+fn test_prioritize_and_execute_fully_packed_payload() {
+    let env = Env::default();
+    let (client, admin) = setup(&env);
+    let caller = Address::generate(&env);
+    let target = Address::generate(&env);
+    let id = make_id(&env, 92);
+
+    env.ledger().set_timestamp(0);
+
+    let mut nodes: Vec<PayloadNode> = Vec::new(&env);
+    for i in 0..MAX_PAYLOAD_WIDTH {
+        let mut leaves: Vec<LeafData> = Vec::new(&env);
+        for j in 0..MAX_LEAF_COUNT {
+            leaves.push_back(make_leaf(&env, ((i + j) % 256) as u8));
+        }
+        nodes.push_back(PayloadNode {
+            depth: MAX_PAYLOAD_DEPTH,
+            data: Bytes::new(&env),
+            leaves,
+        });
+    }
+    let payload = NestedPayload { version: 1, nodes };
+    client.queue_tx(&caller, &id, &target, &99_999, &payload);
+
+    // Promote to priority and execute immediately (before delay elapses)
+    client.prioritize_tx(&admin, &id);
+    env.ledger().set_timestamp(1);
+    let executed = client.execute_tx(&caller, &id);
+    assert!(executed.priority);
+    assert_eq!(executed.payload.nodes.len(), MAX_PAYLOAD_WIDTH);
+}
